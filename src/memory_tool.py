@@ -48,7 +48,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         self.base_path = Path(base_path)
         self.memory_root = self.base_path / "memories"
         self.memory_root.mkdir(exist_ok=True, parents=True)
-        logger.info(f"Memory tool initialized with root: {self.memory_root.absolute()}")
+        logger.info(f"[MEMORY] Initialized with root: {self.memory_root.absolute()}")
 
     def _validate_path(self, path: str) -> Path:
         """
@@ -93,7 +93,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             File contents or directory listing
         """
-        logger.info(f"view() called: path={command.path}, view_range={command.view_range}")
+        logger.debug(f"[MEMORY] view() called: path={command.path}, view_range={command.view_range}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -107,7 +107,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
                             continue
                         items.append(f"{item.name}/" if item.is_dir() else item.name)
                     result = f"Directory: {command.path}\n" + "\n".join([f"- {item}" for item in items])
-                    logger.debug(f"Listed directory: {command.path}")
+                    logger.debug(f"[MEMORY] Listed directory: {command.path} - Found {len(items)} items")
                     return result
                 except Exception as e:
                     raise RuntimeError(f"Cannot read directory {command.path}: {e}") from e
@@ -127,14 +127,22 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
                 lines = lines[start_line:end_line]
 
             result = '\n'.join(lines)
-            logger.debug(f"Read file: {command.path} ({len(lines)} lines)")
+
+            # Log content that was loaded
+            logger.debug(f"[MEMORY] Loaded file: {command.path}")
+            logger.debug(f"[MEMORY]   Lines: {len(lines)} | Characters: {len(result)}")
+            if len(result) <= 200:
+                logger.debug(f"[MEMORY]   Content: {result}")
+            else:
+                logger.debug(f"[MEMORY]   Content preview: {result[:200]}... (truncated)")
+
             return result
 
         except (ValueError, RuntimeError) as e:
-            logger.warning(f"Error in view: {e}")
+            logger.warning(f"[MEMORY] Error in view: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error viewing {command.path}: {e}")
+            logger.error(f"[MEMORY] Unexpected error viewing {command.path}: {e}")
             raise RuntimeError(f"Error viewing {command.path}: {e}") from e
 
     @override
@@ -148,7 +156,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.info(f"create() called: path={command.path}, content_length={len(command.file_text)}")
+        logger.debug(f"[MEMORY] create() called: path={command.path}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -161,14 +169,23 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
 
             full_path.write_text(command.file_text, encoding='utf-8')
 
-            logger.info(f"Created memory file: {command.path}")
+            # Log the new file creation with content
+            lines = command.file_text.splitlines()
+            logger.debug(f"[MEMORY] Created new file: {command.path}")
+            logger.debug(f"[MEMORY]   Lines: {len(lines)} | Characters: {len(command.file_text)}")
+            if len(command.file_text) <= 200:
+                logger.debug(f"[MEMORY]   Content: {command.file_text}")
+            else:
+                logger.debug(f"[MEMORY]   Content preview: {command.file_text[:200]}... (truncated)")
+
+            logger.info(f"[MEMORY] ✓ Created memory file: {command.path}")
             return f"Successfully created {command.path}"
 
         except (ValueError, RuntimeError) as e:
-            logger.warning(f"Error in create: {e}")
+            logger.warning(f"[MEMORY] Error in create: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error creating {command.path}: {e}")
+            logger.error(f"[MEMORY] Unexpected error creating {command.path}: {e}")
             raise RuntimeError(f"Error creating {command.path}: {e}") from e
 
     @override
@@ -182,7 +199,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.info(f"str_replace() called: path={command.path}")
+        logger.debug(f"[MEMORY] str_replace() called: path={command.path}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -202,14 +219,21 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             new_content = content.replace(command.old_str, command.new_str)
             full_path.write_text(new_content, encoding='utf-8')
 
-            logger.info(f"Replaced string in {command.path}")
+            # Log what was changed
+            old_preview = command.old_str if len(command.old_str) <= 100 else command.old_str[:100] + "..."
+            new_preview = command.new_str if len(command.new_str) <= 100 else command.new_str[:100] + "..."
+            logger.debug(f"[MEMORY] Updated file: {command.path}")
+            logger.debug(f"[MEMORY]   Old text: {old_preview}")
+            logger.debug(f"[MEMORY]   New text: {new_preview}")
+            logger.info(f"[MEMORY] ✓ Replaced string in {command.path}")
+
             return f"Successfully replaced string in {command.path}"
 
         except (ValueError, RuntimeError) as e:
-            logger.warning(f"Error in str_replace: {e}")
+            logger.warning(f"[MEMORY] Error in str_replace: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error in str_replace {command.path}: {e}")
+            logger.error(f"[MEMORY] Unexpected error in str_replace {command.path}: {e}")
             raise RuntimeError(f"Error replacing string in {command.path}: {e}") from e
 
     @override
@@ -223,7 +247,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.info(f"insert() called: path={command.path}, line={command.line}")
+        logger.debug(f"[MEMORY] insert() called: path={command.path}, line={command.line}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -248,14 +272,19 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             lines.insert(insert_idx, insert_text)
             full_path.write_text(''.join(lines), encoding='utf-8')
 
-            logger.info(f"Inserted line at position {command.line} in {command.path}")
+            # Log what was inserted
+            insert_preview = command.insert_line if len(command.insert_line) <= 100 else command.insert_line[:100] + "..."
+            logger.debug(f"[MEMORY] Updated file: {command.path}")
+            logger.debug(f"[MEMORY]   Inserted at line {command.line}: {insert_preview}")
+            logger.info(f"[MEMORY] ✓ Inserted line at position {command.line} in {command.path}")
+
             return f"Successfully inserted line in {command.path}"
 
         except (ValueError, RuntimeError) as e:
-            logger.warning(f"Error in insert: {e}")
+            logger.warning(f"[MEMORY] Error in insert: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error inserting line in {command.path}: {e}")
+            logger.error(f"[MEMORY] Unexpected error inserting line in {command.path}: {e}")
             raise RuntimeError(f"Error inserting line in {command.path}: {e}") from e
 
     @override
@@ -269,7 +298,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.info(f"delete() called: path={command.path}")
+        logger.debug(f"[MEMORY] delete() called: path={command.path}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -279,18 +308,20 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
 
             if full_path.is_dir():
                 shutil.rmtree(full_path)
-                logger.info(f"Deleted directory: {command.path}")
+                logger.debug(f"[MEMORY] Deleted directory: {command.path}")
+                logger.info(f"[MEMORY] ✓ Deleted directory: {command.path}")
                 return f"Successfully deleted directory {command.path}"
             else:
                 full_path.unlink()
-                logger.info(f"Deleted file: {command.path}")
+                logger.debug(f"[MEMORY] Deleted file: {command.path}")
+                logger.info(f"[MEMORY] ✓ Deleted file: {command.path}")
                 return f"Successfully deleted {command.path}"
 
         except (ValueError, RuntimeError) as e:
-            logger.warning(f"Error in delete: {e}")
+            logger.warning(f"[MEMORY] Error in delete: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error deleting {command.path}: {e}")
+            logger.error(f"[MEMORY] Unexpected error deleting {command.path}: {e}")
             raise RuntimeError(f"Error deleting {command.path}: {e}") from e
 
     @override
@@ -304,7 +335,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.info(f"rename() called: old_path={command.old_path}, new_path={command.new_path}")
+        logger.debug(f"[MEMORY] rename() called: old_path={command.old_path}, new_path={command.new_path}")
 
         try:
             full_old_path = self._validate_path(command.old_path)
@@ -321,14 +352,15 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
 
             full_old_path.rename(full_new_path)
 
-            logger.info(f"Renamed {command.old_path} to {command.new_path}")
+            logger.debug(f"[MEMORY] Renamed/moved: {command.old_path} → {command.new_path}")
+            logger.info(f"[MEMORY] ✓ Renamed {command.old_path} to {command.new_path}")
             return f"Successfully renamed {command.old_path} to {command.new_path}"
 
         except (ValueError, RuntimeError) as e:
-            logger.warning(f"Error in rename: {e}")
+            logger.warning(f"[MEMORY] Error in rename: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error renaming {command.old_path}: {e}")
+            logger.error(f"[MEMORY] Unexpected error renaming {command.old_path}: {e}")
             raise RuntimeError(f"Error renaming {command.old_path}: {e}") from e
 
     def clear_all_memory(self) -> str:
@@ -338,16 +370,16 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.warning("clear_all_memory() called - deleting all memories")
+        logger.warning("[MEMORY] clear_all_memory() called - deleting all memories")
 
         try:
             if self.memory_root.exists():
                 shutil.rmtree(self.memory_root)
                 self.memory_root.mkdir(exist_ok=True)
 
-            logger.info("All memories cleared")
+            logger.info("[MEMORY] ✓ All memories cleared")
             return "All memories have been cleared"
 
         except Exception as e:
-            logger.error(f"Error clearing memories: {e}")
+            logger.error(f"[MEMORY] Error clearing memories: {e}")
             return f"Error clearing memories: {str(e)}"

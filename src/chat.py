@@ -24,9 +24,22 @@ load_dotenv()
 
 
 def setup_logging(log_level: str = "INFO", log_file: str|None = None) -> None:
-    """Configure logging based on log level and optional file output."""
+    """Configure logging based on log level and optional file output.
+
+    In DEBUG mode:
+    - Show DEBUG logs from our app (src.*, __main__, memory_tool)
+    - Show INFO+ from dependencies (anthropic, httpx, etc.)
+    - Show detailed memory operations and LLM interactions
+    """
     # Convert string level to logging constant
     level = getattr(logging, log_level.upper(), logging.INFO)
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)  # Default for all loggers
+
+    # Clear existing handlers to avoid duplicates
+    root_logger.handlers.clear()
 
     # Configure handlers
     handlers = []
@@ -46,11 +59,26 @@ def setup_logging(log_level: str = "INFO", log_file: str|None = None) -> None:
         )
         handlers.append(file_handler)
 
-    logging.basicConfig(
-        level=level,
-        handlers=handlers,
-        force=True  # Override any existing configuration
-    )
+    # Add handlers to root logger
+    for handler in handlers:
+        root_logger.addHandler(handler)
+
+    # In DEBUG mode, filter dependency logging to reduce noise
+    if level == logging.DEBUG:
+        # Set DEBUG level for our application loggers only
+        logging.getLogger('src').setLevel(logging.DEBUG)
+        logging.getLogger('__main__').setLevel(logging.DEBUG)
+        logging.getLogger('memory_tool').setLevel(logging.DEBUG)
+
+        # Keep dependencies at INFO level to reduce noise
+        logging.getLogger('anthropic').setLevel(logging.INFO)
+        logging.getLogger('httpx').setLevel(logging.INFO)
+        logging.getLogger('httpcore').setLevel(logging.INFO)
+    else:
+        # Apply the specified level to our app loggers
+        logging.getLogger('src').setLevel(level)
+        logging.getLogger('__main__').setLevel(level)
+        logging.getLogger('memory_tool').setLevel(level)
 
 
 def print_welcome():
@@ -175,7 +203,22 @@ You have complete authority over your memory. Manage it wisely."""
 
             # Call Claude with memory tool
             # The magic happens here: tool_runner automatically executes memory operations
-            logger.debug("Sending request to Claude with memory tool")
+            logger.debug("="*60)
+            logger.debug("SENDING REQUEST TO LLM")
+            logger.debug("="*60)
+            logger.debug(f"Model: claude-sonnet-4-5-20250929")
+            logger.debug(f"System prompt: {system_prompt}")
+            logger.debug(f"Messages ({len(messages)} total):")
+            for idx, msg in enumerate(messages):
+                role = msg['role']
+                content = msg['content']
+                # Truncate very long messages for readability
+                if len(content) > 500:
+                    content_preview = content[:500] + f"... ({len(content)} chars total)"
+                else:
+                    content_preview = content
+                logger.debug(f"  [{idx+1}] {role}: {content_preview}")
+            logger.debug("="*60)
 
             runner = client.beta.messages.tool_runner(
                 model=model,
