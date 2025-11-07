@@ -90,6 +90,12 @@ You have complete authority over your memory. Manage it wisely."""
     messages = []
     debug_mode = debug
 
+    # Track cumulative token usage
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_cache_read_tokens = 0
+    total_cache_write_tokens = 0
+
     while True:
         try:
             # Get user input
@@ -115,6 +121,11 @@ You have complete authority over your memory. Manage it wisely."""
                 if confirm == "yes":
                     result = memory_tool.clear_all_memory()
                     messages = []  # Reset conversation
+                    # Reset token counters
+                    total_input_tokens = 0
+                    total_output_tokens = 0
+                    total_cache_read_tokens = 0
+                    total_cache_write_tokens = 0
                     print(f"\n{result}\n")
                 continue
 
@@ -159,11 +170,29 @@ You have complete authority over your memory. Manage it wisely."""
 
             # Display token usage
             usage = response.usage
+            last_input = usage.input_tokens
+            last_output = usage.output_tokens
+            last_cache_read = getattr(usage, 'cache_read_input_tokens', 0)
+            last_cache_write = getattr(usage, 'cache_creation_input_tokens', 0)
+
+            # Update cumulative totals
+            total_input_tokens += last_input
+            total_output_tokens += last_output
+            total_cache_read_tokens += last_cache_read
+            total_cache_write_tokens += last_cache_write
+
+            # Log both last request and cumulative totals
             logger.info(
-                f"Tokens - Input: {usage.input_tokens}, "
-                f"Output: {usage.output_tokens}, "
-                f"Cache read: {getattr(usage, 'cache_read_input_tokens', 0)}, "
-                f"Cache write: {getattr(usage, 'cache_creation_input_tokens', 0)}"
+                f"Last Request Tokens - Input: {last_input}, "
+                f"Output: {last_output}, "
+                f"Cache read: {last_cache_read}, "
+                f"Cache write: {last_cache_write}"
+            )
+            logger.info(
+                f"Total Tokens - Input: {total_input_tokens}, "
+                f"Output: {total_output_tokens}, "
+                f"Cache read: {total_cache_read_tokens}, "
+                f"Cache write: {total_cache_write_tokens}"
             )
 
         except KeyboardInterrupt:
