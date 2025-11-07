@@ -23,20 +23,22 @@ from memory_tool import LocalFilesystemMemoryTool
 load_dotenv()
 
 
-def setup_logging(log_level: str = "INFO", log_file: str|None = None) -> None:
-    """Configure logging based on log level and optional file output.
+def setup_logging(app_log_level: str = "INFO", dependencies_log_level: str = "WARNING", log_file: str|None = None) -> None:
+    """Configure logging based on log levels and optional file output.
 
-    In DEBUG mode:
-    - Show DEBUG logs from our app (src.*, __main__, memory_tool)
-    - Show INFO+ from dependencies (anthropic, httpx, etc.)
-    - Show detailed memory operations and LLM interactions
+    Args:
+        app_log_level: Log level for application loggers (src.*, __main__, memory_tool)
+        dependencies_log_level: Log level for all dependency loggers (anthropic, httpx, etc.)
+        log_file: Optional file path for logging output
     """
-    # Convert string level to logging constant
-    level = getattr(logging, log_level.upper(), logging.INFO)
+    # Convert string levels to logging constants
+    app_level = getattr(logging, app_log_level.upper(), logging.INFO)
+    dep_level = getattr(logging, dependencies_log_level.upper(), logging.WARNING)
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)  # Default for all loggers
+    # Set root to the dependency level (affects all loggers by default)
+    root_logger.setLevel(dep_level)
 
     # Clear existing handlers to avoid duplicates
     root_logger.handlers.clear()
@@ -63,22 +65,10 @@ def setup_logging(log_level: str = "INFO", log_file: str|None = None) -> None:
     for handler in handlers:
         root_logger.addHandler(handler)
 
-    # In DEBUG mode, filter dependency logging to reduce noise
-    if level == logging.DEBUG:
-        # Set DEBUG level for our application loggers only
-        logging.getLogger('src').setLevel(logging.DEBUG)
-        logging.getLogger('__main__').setLevel(logging.DEBUG)
-        logging.getLogger('memory_tool').setLevel(logging.DEBUG)
-
-        # Keep dependencies at WARNING level to reduce noise
-        logging.getLogger('anthropic').setLevel(logging.WARNING)
-        logging.getLogger('httpx').setLevel(logging.WARNING)
-        logging.getLogger('httpcore').setLevel(logging.WARNING)
-    else:
-        # Apply the specified level to our app loggers
-        logging.getLogger('src').setLevel(level)
-        logging.getLogger('__main__').setLevel(level)
-        logging.getLogger('memory_tool').setLevel(level)
+    # Set our application loggers to the requested level
+    # All other loggers inherit dep_level from root
+    for logger_name in ['src', '__main__', 'memory_tool']:
+        logging.getLogger(logger_name).setLevel(app_level)
 
 
 def print_welcome():
@@ -113,9 +103,10 @@ def conversation_loop():
         sys.exit(1)
 
     # Configure logging from environment
-    log_level = os.getenv("LOG_LEVEL", "INFO")
+    app_log_level = os.getenv("APP_LOG_LEVEL", "INFO")
+    dependencies_log_level = os.getenv("DEPENDENCIES_LOG_LEVEL", "WARNING")
     log_file = os.getenv("LOG_TO_FILE")
-    setup_logging(log_level, log_file)
+    setup_logging(app_log_level, dependencies_log_level, log_file)
     logger = logging.getLogger(__name__)
 
     # Get model from environment with default to Sonnet 4.5
@@ -145,7 +136,7 @@ You have complete authority over your memory. Manage it wisely."""
 
     # Conversation state
     messages = []
-    current_log_level = log_level
+    current_app_log_level = app_log_level
 
     # Track cumulative token usage
     total_input_tokens = 0
@@ -187,14 +178,14 @@ You have complete authority over your memory. Manage it wisely."""
                 continue
 
             elif user_input == "/debug":
-                # Toggle between DEBUG and the original log level
-                if current_log_level == "DEBUG":
-                    current_log_level = log_level
+                # Toggle between DEBUG and the original app log level
+                if current_app_log_level == "DEBUG":
+                    current_app_log_level = app_log_level
                     status = "disabled"
                 else:
-                    current_log_level = "DEBUG"
+                    current_app_log_level = "DEBUG"
                     status = "enabled"
-                setup_logging(current_log_level, log_file)
+                setup_logging(current_app_log_level, dependencies_log_level, log_file)
                 print(f"\nDebug logging {status}\n")
                 continue
 
@@ -277,7 +268,7 @@ You have complete authority over your memory. Manage it wisely."""
             continue
 
         except Exception as e:
-            logger.error(f"Error in conversation loop: {e}", exc_info=(current_log_level == "DEBUG"))
+            logger.error(f"Error in conversation loop: {e}", exc_info=(current_app_log_level == "DEBUG"))
             print(f"\nError: {str(e)}\n")
             print("Try again or type /quit to exit.\n")
 
