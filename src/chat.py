@@ -23,10 +23,25 @@ from memory_tool import LocalFilesystemMemoryTool
 load_dotenv()
 
 
-def setup_logging(log_level: str = "INFO", log_file: str|None = None) -> None:
-    """Configure logging based on log level and optional file output."""
-    # Convert string level to logging constant
-    level = getattr(logging, log_level.upper(), logging.INFO)
+def setup_logging(app_log_level: str = "INFO", dependencies_log_level: str = "WARNING", log_file: str|None = None) -> None:
+    """Configure logging based on log levels and optional file output.
+
+    Args:
+        app_log_level: Log level for application loggers (src.*, __main__, memory_tool)
+        dependencies_log_level: Log level for all dependency loggers (anthropic, httpx, etc.)
+        log_file: Optional file path for logging output
+    """
+    # Convert string levels to logging constants
+    app_level = getattr(logging, app_log_level.upper(), logging.INFO)
+    dep_level = getattr(logging, dependencies_log_level.upper(), logging.WARNING)
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    # Set root to the dependency level (affects all loggers by default)
+    root_logger.setLevel(dep_level)
+
+    # Clear existing handlers to avoid duplicates
+    root_logger.handlers.clear()
 
     # Configure handlers
     handlers = []
@@ -46,11 +61,40 @@ def setup_logging(log_level: str = "INFO", log_file: str|None = None) -> None:
         )
         handlers.append(file_handler)
 
-    logging.basicConfig(
-        level=level,
-        handlers=handlers,
-        force=True  # Override any existing configuration
-    )
+    # Add handlers to root logger
+    for handler in handlers:
+        root_logger.addHandler(handler)
+
+    # Set our application loggers to the requested level
+    # All other loggers inherit dep_level from root
+    for logger_name in ['src', '__main__', 'memory_tool']:
+        logging.getLogger(logger_name).setLevel(app_level)
+
+
+def load_system_prompt(prompt_file: str = "prompts/system_prompt.txt") -> str:
+    """Load system prompt from file, stripping comment lines.
+
+    Args:
+        prompt_file: Path to the prompt file (relative to project root)
+
+    Returns:
+        The system prompt with comments removed
+    """
+    try:
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            lines = []
+            for line in f:
+                # Strip comment lines (lines starting with #)
+                stripped = line.strip()
+                if stripped and not stripped.startswith('#'):
+                    lines.append(line.rstrip())
+                elif not stripped:
+                    # Preserve blank lines
+                    lines.append('')
+            return '\n'.join(lines).strip()
+    except FileNotFoundError:
+        logging.getLogger(__name__).error(f"System prompt file not found: {prompt_file}")
+        raise
 
 
 def print_welcome():
@@ -85,9 +129,10 @@ def conversation_loop():
         sys.exit(1)
 
     # Configure logging from environment
-    log_level = os.getenv("LOG_LEVEL", "INFO")
+    app_log_level = os.getenv("APP_LOG_LEVEL", "INFO")
+    dependencies_log_level = os.getenv("DEPENDENCIES_LOG_LEVEL", "WARNING")
     log_file = os.getenv("LOG_TO_FILE")
-    setup_logging(log_level, log_file)
+    setup_logging(app_log_level, dependencies_log_level, log_file)
     logger = logging.getLogger(__name__)
 
     # Get model from environment with default to Sonnet 4.5
@@ -101,23 +146,16 @@ def conversation_loop():
     client = Anthropic(api_key=api_key)
     memory_tool = LocalFilesystemMemoryTool()
 
-    # System prompt: Guide Claude to manage memory autonomously
-    system_prompt = """You are a helpful assistant with persistent memory capabilities.
-
-Key behaviors:
-- Autonomously decide what information is worth remembering (names, preferences, project details, etc.)
-- Use your memory tool to save important facts without being explicitly asked
-- Keep memories organized and up-to-date - remove outdated info, consolidate related facts
-- Recall relevant memories when they help provide better responses
-
-You have complete authority over your memory. Manage it wisely."""
+    # Load system prompt from file
+    system_prompt = load_system_prompt()
+    logger.debug(f"Loaded system prompt from prompts/system_prompt.txt")
 
     print_welcome()
     logger.info(f"Starting conversation loop with model: {model}")
 
     # Conversation state
     messages = []
-    current_log_level = log_level
+    current_app_log_level = app_log_level
 
     # Track cumulative token usage
     total_input_tokens = 0
@@ -159,14 +197,14 @@ You have complete authority over your memory. Manage it wisely."""
                 continue
 
             elif user_input == "/debug":
-                # Toggle between DEBUG and the original log level
-                if current_log_level == "DEBUG":
-                    current_log_level = log_level
+                # Toggle between DEBUG and the original app log level
+                if current_app_log_level == "DEBUG":
+                    current_app_log_level = app_log_level
                     status = "disabled"
                 else:
-                    current_log_level = "DEBUG"
+                    current_app_log_level = "DEBUG"
                     status = "enabled"
-                setup_logging(current_log_level, log_file)
+                setup_logging(current_app_log_level, dependencies_log_level, log_file)
                 print(f"\nDebug logging {status}\n")
                 continue
 
@@ -175,7 +213,22 @@ You have complete authority over your memory. Manage it wisely."""
 
             # Call Claude with memory tool
             # The magic happens here: tool_runner automatically executes memory operations
-            logger.debug("Sending request to Claude with memory tool")
+            logger.debug("="*60)
+            logger.debug("SENDING REQUEST TO LLM")
+            logger.debug("="*60)
+            logger.debug(f"Model: claude-sonnet-4-5-20250929")
+            logger.debug(f"System prompt: {system_prompt}")
+            logger.debug(f"Messages ({len(messages)} total):")
+            for idx, msg in enumerate(messages):
+                role = msg['role']
+                content = msg['content']
+                # Truncate very long messages for readability
+                if len(content) > 500:
+                    content_preview = content[:500] + f"... ({len(content)} chars total)"
+                else:
+                    content_preview = content
+                logger.debug(f"  [{idx+1}] {role}: {content_preview}")
+            logger.debug("="*60)
 
             runner = client.beta.messages.tool_runner(
                 model=model,
@@ -234,7 +287,7 @@ You have complete authority over your memory. Manage it wisely."""
             continue
 
         except Exception as e:
-            logger.error(f"Error in conversation loop: {e}", exc_info=(current_log_level == "DEBUG"))
+            logger.error(f"Error in conversation loop: {e}", exc_info=(current_app_log_level == "DEBUG"))
             print(f"\nError: {str(e)}\n")
             print("Try again or type /quit to exit.\n")
 
