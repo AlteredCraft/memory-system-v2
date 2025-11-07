@@ -23,13 +23,33 @@ from memory_tool import LocalFilesystemMemoryTool
 load_dotenv()
 
 
-def setup_logging(debug: bool = False) -> None:
-    """Configure logging based on debug flag."""
-    level = logging.DEBUG if debug else logging.INFO
+def setup_logging(log_level: str = "INFO", log_file: str|None = None) -> None:
+    """Configure logging based on log level and optional file output."""
+    # Convert string level to logging constant
+    level = getattr(logging, log_level.upper(), logging.INFO)
+
+    # Configure handlers
+    handlers = []
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(
+        logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
+    )
+    handlers.append(console_handler)
+
+    # File handler if specified
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(
+            logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
+        )
+        handlers.append(file_handler)
+
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%H:%M:%S'
+        handlers=handlers,
+        force=True  # Override any existing configuration
     )
 
 
@@ -64,9 +84,18 @@ def conversation_loop():
         print("Create a .env file with: ANTHROPIC_API_KEY=your_key_here")
         sys.exit(1)
 
-    debug = os.getenv("DEBUG", "false").lower() == "true"
-    setup_logging(debug)
+    # Configure logging from environment
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    log_file = os.getenv("LOG_TO_FILE")
+    setup_logging(log_level, log_file)
     logger = logging.getLogger(__name__)
+
+    # Get model from environment with default to Sonnet 4.5
+    model = os.getenv("ANTHROPIC_MODEL", "").strip()
+    if not model:
+        print("Error: ANTHROPIC_MODEL not found in environment")
+        print("Create a .env file with: ANTHROPIC_MODEL=your_desired_model_here")
+        sys.exit(1)
 
     # Initialize client and memory tool
     client = Anthropic(api_key=api_key)
@@ -84,11 +113,17 @@ Key behaviors:
 You have complete authority over your memory. Manage it wisely."""
 
     print_welcome()
-    logger.info("Starting conversation loop")
+    logger.info(f"Starting conversation loop with model: {model}")
 
     # Conversation state
     messages = []
-    debug_mode = debug
+    current_log_level = log_level
+
+    # Track cumulative token usage
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_cache_read_tokens = 0
+    total_cache_write_tokens = 0
 
     while True:
         try:
@@ -115,13 +150,23 @@ You have complete authority over your memory. Manage it wisely."""
                 if confirm == "yes":
                     result = memory_tool.clear_all_memory()
                     messages = []  # Reset conversation
+                    # Reset token counters
+                    total_input_tokens = 0
+                    total_output_tokens = 0
+                    total_cache_read_tokens = 0
+                    total_cache_write_tokens = 0
                     print(f"\n{result}\n")
                 continue
 
             elif user_input == "/debug":
-                debug_mode = not debug_mode
-                setup_logging(debug_mode)
-                status = "enabled" if debug_mode else "disabled"
+                # Toggle between DEBUG and the original log level
+                if current_log_level == "DEBUG":
+                    current_log_level = log_level
+                    status = "disabled"
+                else:
+                    current_log_level = "DEBUG"
+                    status = "enabled"
+                setup_logging(current_log_level, log_file)
                 print(f"\nDebug logging {status}\n")
                 continue
 
@@ -133,7 +178,7 @@ You have complete authority over your memory. Manage it wisely."""
             logger.debug("Sending request to Claude with memory tool")
 
             runner = client.beta.messages.tool_runner(
-                model="claude-sonnet-4-5-20250929",
+                model=model,
                 max_tokens=2048,
                 system=system_prompt,
                 tools=[memory_tool],
@@ -159,11 +204,29 @@ You have complete authority over your memory. Manage it wisely."""
 
             # Display token usage
             usage = response.usage
+            last_input = usage.input_tokens
+            last_output = usage.output_tokens
+            last_cache_read = getattr(usage, 'cache_read_input_tokens', 0)
+            last_cache_write = getattr(usage, 'cache_creation_input_tokens', 0)
+
+            # Update cumulative totals
+            total_input_tokens += last_input
+            total_output_tokens += last_output
+            total_cache_read_tokens += last_cache_read
+            total_cache_write_tokens += last_cache_write
+
+            # Log both last request and cumulative totals
             logger.info(
-                f"Tokens - Input: {usage.input_tokens}, "
-                f"Output: {usage.output_tokens}, "
-                f"Cache read: {getattr(usage, 'cache_read_input_tokens', 0)}, "
-                f"Cache write: {getattr(usage, 'cache_creation_input_tokens', 0)}"
+                f"Last Request Tokens - Input: {last_input}, "
+                f"Output: {last_output}, "
+                f"Cache read: {last_cache_read}, "
+                f"Cache write: {last_cache_write}"
+            )
+            logger.info(
+                f"Total Tokens - Input: {total_input_tokens}, "
+                f"Output: {total_output_tokens}, "
+                f"Cache read: {total_cache_read_tokens}, "
+                f"Cache write: {total_cache_write_tokens}"
             )
 
         except KeyboardInterrupt:
@@ -171,7 +234,7 @@ You have complete authority over your memory. Manage it wisely."""
             continue
 
         except Exception as e:
-            logger.error(f"Error in conversation loop: {e}", exc_info=debug_mode)
+            logger.error(f"Error in conversation loop: {e}", exc_info=(current_log_level == "DEBUG"))
             print(f"\nError: {str(e)}\n")
             print("Try again or type /quit to exit.\n")
 

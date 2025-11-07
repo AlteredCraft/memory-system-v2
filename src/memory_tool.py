@@ -93,7 +93,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             File contents or directory listing
         """
-        logger.debug(f"view() called: path={command.path}, view_range={command.view_range}")
+        logger.info(f"view() called: path={command.path}, view_range={command.view_range}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -148,7 +148,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.debug(f"create() called: path={command.path}, content_length={len(command.file_text)}")
+        logger.info(f"create() called: path={command.path}, content_length={len(command.file_text)}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -182,7 +182,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.debug(f"str_replace() called: path={command.path}")
+        logger.info(f"str_replace() called: path={command.path}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -223,7 +223,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.debug(f"insert() called: path={command.path}, line={command.line}")
+        logger.info(f"insert() called: path={command.path}, line={command.line}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -269,7 +269,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.debug(f"delete() called: path={command.path}")
+        logger.info(f"delete() called: path={command.path}")
 
         try:
             full_path = self._validate_path(command.path)
@@ -304,7 +304,7 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         Returns:
             Success message
         """
-        logger.debug(f"rename() called: old_path={command.old_path}, new_path={command.new_path}")
+        logger.info(f"rename() called: old_path={command.old_path}, new_path={command.new_path}")
 
         try:
             full_old_path = self._validate_path(command.old_path)
