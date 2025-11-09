@@ -126,6 +126,35 @@ sequenceDiagram
     Note over HostApp,MemorySystem: Loop continues for each user message...<br/>Claude autonomously decides when to<br/>read/write/update memories
 ```
 
+## Decision Log
+
+This table shows the chronological progression of user inputs and the LLM's autonomous decisions during the conversation captured in the debug log.
+
+| Time | User Input | LLM Decisions | Outcome |
+|------|------------|---------------|---------|
+| **13:44:14** | `"hello"` | 1. View memories directory | Found 2 items in memory |
+| **13:45:28** | `"hello"` | 1. View memories directory<br/>2. View `user_preferences.txt` | Retrieved user context (beach location, writing projects, preferences). Generated personalized greeting asking about beach. |
+| **13:45:49** | `"still at the beach, I'd like to start a new dedicated project, and want to keep track of the todos for it. This will be a new web app that assists entreprenures (solo) with managing their responsibiliteis"` | 1. View memories directory<br/>2. View `user_preferences.txt`<br/>3. **Create** `project_solo_entrepreneur_app.txt` with project description and initial to-do list<br/>4. **Update** `user_preferences.txt` to add project to "Current Projects" section | New project tracking file created (25 lines, 624 chars). User preferences updated with project reference. Confirmed creation to user. |
+| **13:47:47** | `"Let's catalog the features for the MVP, TimeTracking (with a client rolodex), dashboard to record company metadata"` | 1. ~~Update wrong file~~ `solo_entrepreneur_app_project.md` → **ERROR: File not found**<br/>2. **Recovery**: View memories directory<br/>3. View `project_solo_entrepreneur_app.txt`<br/>4. **Update** project file, replacing "To-Do List" section with structured "MVP Features" (Time Tracking, Client Rolodex, Dashboard) | Demonstrated autonomous error recovery. Successfully updated project file with MVP feature catalog. |
+
+### Key Observations
+
+**Autonomous Behavior:**
+- LLM proactively checks memory context before responding (no explicit instruction to do so)
+- Creates structured project tracking without being told the format
+- Self-recovers from errors by exploring the memory structure
+
+**Memory Management Strategy:**
+- Always views directory first to understand current state
+- Reads existing files before modifying them
+- Updates related files to maintain consistency (e.g., both project file AND user preferences)
+
+**Decision Patterns:**
+1. **Context gathering** → View memories to understand what's saved
+2. **Information synthesis** → Read relevant files to build context
+3. **Proactive organization** → Create structured files for new information
+4. **Cross-referencing** → Update multiple files to maintain relational integrity
+
 ## Key Data Flow Points
 
 ### 1. **What Triggers Memory Files to be Read?**
