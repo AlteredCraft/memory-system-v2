@@ -159,6 +159,32 @@ Every conversation is automatically recorded in a detailed session trace file st
 
 Session traces are finalized when you `/quit` or `/clear`, and the file path is displayed in the console.
 
+### Generating Sequence Diagrams from Traces
+
+You can visualize your session traces as Mermaid sequence diagrams using the included script:
+
+```bash
+# Generate diagram for a specific trace file
+python scripts/generate_sequence_diagram.py sessions/session_20251109_143414_abc123.json
+
+# Save diagram to a file
+python scripts/generate_sequence_diagram.py sessions/session_20251109_143414_abc123.json --output my_diagram.md
+
+# Process the most recent session
+python scripts/generate_sequence_diagram.py $(ls -t sessions/*.json | head -1)
+```
+
+The generated diagram includes:
+- Visual representation of User ↔ Host App ↔ LLM ↔ Memory System interactions
+- All tool calls and their results
+- User inputs and LLM responses
+- Summary statistics (event counts, token usage, tool command usage)
+
+The output is in Mermaid format and can be viewed in:
+- GitHub/GitLab markdown files (automatic rendering)
+- VS Code with Mermaid extensions
+- Online tools like [mermaid.live](https://mermaid.live/)
+
 ---
 
 ## The Teaching Point
