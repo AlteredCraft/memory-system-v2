@@ -84,6 +84,7 @@ Claude: For Leo's 5th birthday, here are some age-appropriate gift ideas...
 - `/memory_view` - View all stored memories (useful for debugging)
 - `/clear` - Clear all memories and start fresh
 - `/debug` - Toggle debug logging to see memory operations
+- `/dump` - Display the current context window (system prompt + conversation history)
 
 ---
 
@@ -98,6 +99,65 @@ All memories are saved as plain text files in:
 ```
 
 Claude creates and organizes these files autonomously. You can inspect them directly - they're just text files!
+
+---
+
+## System Prompt Selection
+
+On startup, you can choose which system prompt to use from a catalog of available prompts in the `prompts/` directory.
+
+**How it works:**
+1. When you run the app, it scans `prompts/` for all `.txt` files
+2. If multiple prompts are found, you'll see a numbered list:
+   ```
+   ======================================================================
+   Available System Prompts:
+   ======================================================================
+     1. concise_assistant
+     2. system_prompt
+     3. verbose_memory_assistant
+   ======================================================================
+
+   Select a prompt (1-3):
+   ```
+3. Choose the prompt that fits your needs
+4. If only one prompt exists, it's auto-selected
+
+**Included prompts:**
+- `system_prompt.txt` - Default autonomous memory management (balanced)
+- `concise_assistant.txt` - Minimal, straightforward assistant
+- `verbose_memory_assistant.txt` - Detailed memory management with explanations
+
+You can create your own custom prompts by adding `.txt` files to the `prompts/` directory!
+
+---
+
+## Session Trace
+
+Every conversation is automatically recorded in a detailed session trace file stored in `./sessions/`.
+
+**What's captured:**
+- Session metadata (timestamp, model, system prompt)
+- All user inputs and assistant responses
+- LLM request/response cycles
+- Memory tool operations (tool calls and results)
+- Token usage statistics (input, output, cache read/write)
+- Errors and debugging information
+
+**Trace file format:**
+```
+./sessions/
+└── session_20250109_143022_abc123.json
+```
+
+**What you can do with traces:**
+- Analyze conversation patterns and memory usage
+- Debug unexpected behavior
+- Review token consumption over time
+- Audit what information was stored in memory
+- Reproduce issues by examining the exact sequence of events
+
+Session traces are finalized when you `/quit` or `/clear`, and the file path is displayed in the console.
 
 ---
 
@@ -137,6 +197,7 @@ The shift from v1 to v2 is about **authority**. We've moved from micromanaging t
 **SDK:** Anthropic Python SDK (`anthropic>=0.40.0`)
 **Memory Backend:** Local filesystem (files in `./memories/`)
 **Memory Operations:** `view`, `create`, `str_replace`, `insert`, `delete`, `rename`
+**Session Tracking:** JSON trace files in `./sessions/` (implemented in `src/session_trace.py`)
 
 For production deployments with security considerations (path validation, rate limiting, etc.), see:
 📚 [Anthropic Memory Tool Documentation](https://docs.claude.com/en/docs/agents-and-tools/tool-use/memory-tool)
@@ -160,6 +221,7 @@ For production deployments with security considerations (path validation, rate l
 **Want to see what's happening under the hood?**
 - Type `/debug` to enable detailed logging
 - Type `/memory_view` to inspect current memories
+- Type `/dump` to see the exact context being sent to Claude (system prompt + all messages)
 
 **Claude isn't remembering things**
 - Try being more explicit: "Remember that I prefer Python over JavaScript"

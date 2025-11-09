@@ -73,6 +73,57 @@ def setup_logging(app_log_level: str = "INFO", dependencies_log_level: str = "WA
         logging.getLogger(logger_name).setLevel(app_level)
 
 
+def select_system_prompt(prompts_dir: str = "prompts") -> str:
+    """Display available system prompts and let user select one.
+
+    Args:
+        prompts_dir: Path to the directory containing prompt files
+
+    Returns:
+        Path to the selected prompt file
+    """
+    # Get all .txt files in the prompts directory
+    prompts_path = Path(prompts_dir)
+    if not prompts_path.exists():
+        print(f"Error: Prompts directory '{prompts_dir}' not found")
+        sys.exit(1)
+
+    prompt_files = sorted(prompts_path.glob("*.txt"))
+
+    if not prompt_files:
+        print(f"Error: No .txt files found in '{prompts_dir}'")
+        sys.exit(1)
+
+    # If only one prompt, use it automatically
+    if len(prompt_files) == 1:
+        return str(prompt_files[0])
+
+    # Display prompt options
+    print("\n" + "="*70)
+    print("Available System Prompts:")
+    print("="*70)
+    for i, prompt_file in enumerate(prompt_files, 1):
+        print(f"  {i}. {prompt_file.stem}")
+    print("="*70)
+
+    # Get user selection
+    while True:
+        try:
+            choice = input(f"\nSelect a prompt (1-{len(prompt_files)}): ").strip()
+            index = int(choice) - 1
+            if 0 <= index < len(prompt_files):
+                selected = str(prompt_files[index])
+                print(f"Selected: {prompt_files[index].stem}\n")
+                return selected
+            else:
+                print(f"Please enter a number between 1 and {len(prompt_files)}")
+        except ValueError:
+            print("Please enter a valid number")
+        except KeyboardInterrupt:
+            print("\n\nExiting...")
+            sys.exit(0)
+
+
 def load_system_prompt(prompt_file: str = "prompts/system_prompt.txt") -> str:
     """Load system prompt from file, stripping comment lines and appending current date.
 
@@ -117,6 +168,7 @@ def print_welcome():
     print("  /memory_view   - View all stored memories")
     print("  /clear         - Clear all memories and start fresh")
     print("  /debug         - Toggle debug logging")
+    print("  /dump          - Display the current context window")
     print("="*70 + "\n")
 
 
@@ -154,9 +206,10 @@ def conversation_loop():
     client = Anthropic(api_key=api_key)
     memory_tool = LocalFilesystemMemoryTool()
 
-    # Load system prompt from file
-    system_prompt = load_system_prompt()
-    logger.debug(f"Loaded system prompt from prompts/system_prompt.txt")
+    # Select and load system prompt
+    selected_prompt_file = select_system_prompt()
+    system_prompt = load_system_prompt(selected_prompt_file)
+    logger.debug(f"Loaded system prompt from {selected_prompt_file}")
 
     # Initialize session trace
     trace = SessionTrace(model=model, system_prompt=system_prompt)
@@ -225,6 +278,23 @@ def conversation_loop():
                     status = "enabled"
                 setup_logging(current_app_log_level, dependencies_log_level, log_file)
                 print(f"\nDebug logging {status}\n")
+                continue
+
+            elif user_input == "/dump":
+                print("\n" + "="*70)
+                print("CONTEXT WINDOW DUMP")
+                print("="*70 + "\n")
+
+                # Print system prompt
+                print(f"[system prompt]: {system_prompt}\n")
+
+                # Print all messages in the conversation
+                for msg in messages:
+                    role = msg['role']
+                    content = msg['content']
+                    print(f"[{role}] {content}\n")
+
+                print("="*70 + "\n")
                 continue
 
             # Add user message to conversation
