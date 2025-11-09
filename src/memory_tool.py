@@ -48,7 +48,18 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         self.base_path = Path(base_path)
         self.memory_root = self.base_path / "memories"
         self.memory_root.mkdir(exist_ok=True, parents=True)
+        self.trace = None  # Optional session trace
         logger.info(f"[MEMORY] Initialized with root: {self.memory_root.absolute()}")
+
+    def set_trace(self, trace) -> None:
+        """
+        Set the session trace for logging tool operations.
+
+        Args:
+            trace: SessionTrace instance
+        """
+        self.trace = trace
+        logger.debug(f"[MEMORY] Session trace connected")
 
     def _validate_path(self, path: str) -> Path:
         """
@@ -95,6 +106,14 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         """
         logger.debug(f"[MEMORY] view() called: path={command.path}, view_range={command.view_range}")
 
+        # Log tool call to trace
+        if self.trace:
+            self.trace.log_tool_call(
+                tool_name="memory",
+                command="view",
+                parameters={"path": command.path, "view_range": command.view_range}
+            )
+
         try:
             full_path = self._validate_path(command.path)
 
@@ -136,13 +155,40 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             else:
                 logger.debug(f"[MEMORY]   Content preview: {result[:200]}... (truncated)")
 
+            # Log tool result to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="view",
+                    result=result,
+                    success=True
+                )
+
             return result
 
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[MEMORY] Error in view: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="view",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise
         except Exception as e:
             logger.error(f"[MEMORY] Unexpected error viewing {command.path}: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="view",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise RuntimeError(f"Error viewing {command.path}: {e}") from e
 
     @override
@@ -157,6 +203,14 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             Success message
         """
         logger.debug(f"[MEMORY] create() called: path={command.path}")
+
+        # Log tool call to trace
+        if self.trace:
+            self.trace.log_tool_call(
+                tool_name="memory",
+                command="create",
+                parameters={"path": command.path, "content_length": len(command.file_text)}
+            )
 
         try:
             full_path = self._validate_path(command.path)
@@ -178,14 +232,43 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             else:
                 logger.debug(f"[MEMORY]   Content preview: {command.file_text[:200]}... (truncated)")
 
+            result_msg = f"Successfully created {command.path}"
             logger.info(f"[MEMORY] ✓ Created memory file: {command.path}")
-            return f"Successfully created {command.path}"
+
+            # Log tool result to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="create",
+                    result=result_msg,
+                    success=True
+                )
+
+            return result_msg
 
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[MEMORY] Error in create: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="create",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise
         except Exception as e:
             logger.error(f"[MEMORY] Unexpected error creating {command.path}: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="create",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise RuntimeError(f"Error creating {command.path}: {e}") from e
 
     @override
@@ -200,6 +283,18 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             Success message
         """
         logger.debug(f"[MEMORY] str_replace() called: path={command.path}")
+
+        # Log tool call to trace
+        if self.trace:
+            self.trace.log_tool_call(
+                tool_name="memory",
+                command="str_replace",
+                parameters={
+                    "path": command.path,
+                    "old_str_length": len(command.old_str),
+                    "new_str_length": len(command.new_str)
+                }
+            )
 
         try:
             full_path = self._validate_path(command.path)
@@ -225,15 +320,43 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             logger.debug(f"[MEMORY] Updated file: {command.path}")
             logger.debug(f"[MEMORY]   Old text: {old_preview}")
             logger.debug(f"[MEMORY]   New text: {new_preview}")
+            result_msg = f"Successfully replaced string in {command.path}"
             logger.info(f"[MEMORY] ✓ Replaced string in {command.path}")
 
-            return f"Successfully replaced string in {command.path}"
+            # Log tool result to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="str_replace",
+                    result=result_msg,
+                    success=True
+                )
+
+            return result_msg
 
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[MEMORY] Error in str_replace: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="str_replace",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise
         except Exception as e:
             logger.error(f"[MEMORY] Unexpected error in str_replace {command.path}: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="str_replace",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise RuntimeError(f"Error replacing string in {command.path}: {e}") from e
 
     @override
@@ -248,6 +371,18 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             Success message
         """
         logger.debug(f"[MEMORY] insert() called: path={command.path}, line={command.line}")
+
+        # Log tool call to trace
+        if self.trace:
+            self.trace.log_tool_call(
+                tool_name="memory",
+                command="insert",
+                parameters={
+                    "path": command.path,
+                    "line": command.line,
+                    "insert_length": len(command.insert_line)
+                }
+            )
 
         try:
             full_path = self._validate_path(command.path)
@@ -276,15 +411,43 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             insert_preview = command.insert_line if len(command.insert_line) <= 100 else command.insert_line[:100] + "..."
             logger.debug(f"[MEMORY] Updated file: {command.path}")
             logger.debug(f"[MEMORY]   Inserted at line {command.line}: {insert_preview}")
+            result_msg = f"Successfully inserted line in {command.path}"
             logger.info(f"[MEMORY] ✓ Inserted line at position {command.line} in {command.path}")
 
-            return f"Successfully inserted line in {command.path}"
+            # Log tool result to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="insert",
+                    result=result_msg,
+                    success=True
+                )
+
+            return result_msg
 
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[MEMORY] Error in insert: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="insert",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise
         except Exception as e:
             logger.error(f"[MEMORY] Unexpected error inserting line in {command.path}: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="insert",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise RuntimeError(f"Error inserting line in {command.path}: {e}") from e
 
     @override
@@ -300,6 +463,14 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
         """
         logger.debug(f"[MEMORY] delete() called: path={command.path}")
 
+        # Log tool call to trace
+        if self.trace:
+            self.trace.log_tool_call(
+                tool_name="memory",
+                command="delete",
+                parameters={"path": command.path}
+            )
+
         try:
             full_path = self._validate_path(command.path)
 
@@ -308,20 +479,49 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
 
             if full_path.is_dir():
                 shutil.rmtree(full_path)
+                result_msg = f"Successfully deleted directory {command.path}"
                 logger.debug(f"[MEMORY] Deleted directory: {command.path}")
                 logger.info(f"[MEMORY] ✓ Deleted directory: {command.path}")
-                return f"Successfully deleted directory {command.path}"
             else:
                 full_path.unlink()
+                result_msg = f"Successfully deleted {command.path}"
                 logger.debug(f"[MEMORY] Deleted file: {command.path}")
                 logger.info(f"[MEMORY] ✓ Deleted file: {command.path}")
-                return f"Successfully deleted {command.path}"
+
+            # Log tool result to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="delete",
+                    result=result_msg,
+                    success=True
+                )
+
+            return result_msg
 
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[MEMORY] Error in delete: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="delete",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise
         except Exception as e:
             logger.error(f"[MEMORY] Unexpected error deleting {command.path}: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="delete",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise RuntimeError(f"Error deleting {command.path}: {e}") from e
 
     @override
@@ -336,6 +536,17 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
             Success message
         """
         logger.debug(f"[MEMORY] rename() called: old_path={command.old_path}, new_path={command.new_path}")
+
+        # Log tool call to trace
+        if self.trace:
+            self.trace.log_tool_call(
+                tool_name="memory",
+                command="rename",
+                parameters={
+                    "old_path": command.old_path,
+                    "new_path": command.new_path
+                }
+            )
 
         try:
             full_old_path = self._validate_path(command.old_path)
@@ -352,15 +563,44 @@ class LocalFilesystemMemoryTool(BetaAbstractMemoryTool):
 
             full_old_path.rename(full_new_path)
 
+            result_msg = f"Successfully renamed {command.old_path} to {command.new_path}"
             logger.debug(f"[MEMORY] Renamed/moved: {command.old_path} → {command.new_path}")
             logger.info(f"[MEMORY] ✓ Renamed {command.old_path} to {command.new_path}")
-            return f"Successfully renamed {command.old_path} to {command.new_path}"
+
+            # Log tool result to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="rename",
+                    result=result_msg,
+                    success=True
+                )
+
+            return result_msg
 
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[MEMORY] Error in rename: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="rename",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise
         except Exception as e:
             logger.error(f"[MEMORY] Unexpected error renaming {command.old_path}: {e}")
+            # Log error to trace
+            if self.trace:
+                self.trace.log_tool_result(
+                    tool_name="memory",
+                    command="rename",
+                    result="",
+                    success=False,
+                    error=str(e)
+                )
             raise RuntimeError(f"Error renaming {command.old_path}: {e}") from e
 
     def clear_all_memory(self) -> str:

@@ -18,6 +18,7 @@ from anthropic import Anthropic
 from anthropic.types.beta import BetaMemoryTool20250818ViewCommand
 
 from memory_tool import LocalFilesystemMemoryTool
+from session_trace import SessionTrace
 
 
 # Load environment variables
@@ -157,6 +158,10 @@ def conversation_loop():
     system_prompt = load_system_prompt()
     logger.debug(f"Loaded system prompt from prompts/system_prompt.txt")
 
+    # Initialize session trace
+    trace = SessionTrace(model=model, system_prompt=system_prompt)
+    memory_tool.set_trace(trace)
+
     print_welcome()
     logger.info(f"Starting conversation loop with model: {model}")
 
@@ -180,6 +185,8 @@ def conversation_loop():
 
             # Handle commands
             if user_input == "/quit":
+                trace_file = trace.finalize()
+                print(f"\nSession trace saved to: {trace_file}")
                 print("\nGoodbye!\n")
                 break
 
@@ -201,6 +208,11 @@ def conversation_loop():
                     total_cache_read_tokens = 0
                     total_cache_write_tokens = 0
                     print(f"\n{result}\n")
+                    # Start a new trace for the fresh session
+                    old_trace_file = trace.finalize()
+                    print(f"Previous session trace: {old_trace_file}")
+                    trace = SessionTrace(model=model, system_prompt=system_prompt)
+                    memory_tool.set_trace(trace)
                 continue
 
             elif user_input == "/debug":
@@ -218,24 +230,30 @@ def conversation_loop():
             # Add user message to conversation
             messages.append({"role": "user", "content": user_input})
 
+            # Log user input to trace
+            trace.log_user_input(user_input)
+
             # Call Claude with memory tool
             # The magic happens here: tool_runner automatically executes memory operations
             logger.debug("="*60)
             logger.debug("SENDING REQUEST TO LLM")
             logger.debug("="*60)
-            logger.debug(f"Model: claude-sonnet-4-5-20250929")
-            logger.debug(f"System prompt: {system_prompt}")
+            logger.debug(f"Model: {model}")
             logger.debug(f"Messages ({len(messages)} total):")
             for idx, msg in enumerate(messages):
                 role = msg['role']
                 content = msg['content']
                 # Truncate very long messages for readability
-                if len(content) > 500:
-                    content_preview = content[:500] + f"... ({len(content)} chars total)"
-                else:
-                    content_preview = content
-                logger.debug(f"  [{idx+1}] {role}: {content_preview}")
+                if isinstance(content, str):
+                    if len(content) > 500:
+                        content_preview = content[:500] + f"... ({len(content)} chars total)"
+                    else:
+                        content_preview = content
+                    logger.debug(f"  [{idx+1}] {role}: {content_preview}")
             logger.debug("="*60)
+
+            # Log LLM request to trace
+            trace.log_llm_request(messages_count=len(messages), tools=["memory"])
 
             runner = client.beta.messages.tool_runner(
                 model=model,
@@ -258,6 +276,9 @@ def conversation_loop():
 
             # Display response
             print(f"\nClaude: {response_text}\n")
+
+            # Log LLM response to trace
+            trace.log_llm_response(response_text)
 
             # Add assistant response to conversation
             messages.append({"role": "assistant", "content": response_text})
@@ -289,12 +310,25 @@ def conversation_loop():
                 f"Cache write: {total_cache_write_tokens}"
             )
 
+            # Log token usage to trace
+            trace.log_token_usage(
+                input_tokens=last_input,
+                output_tokens=last_output,
+                cache_read_tokens=last_cache_read,
+                cache_write_tokens=last_cache_write,
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+                total_cache_read_tokens=total_cache_read_tokens,
+                total_cache_write_tokens=total_cache_write_tokens
+            )
+
         except KeyboardInterrupt:
             print("\n\nInterrupted. Type /quit to exit or continue chatting.\n")
             continue
 
         except Exception as e:
             logger.error(f"Error in conversation loop: {e}", exc_info=(current_app_log_level == "DEBUG"))
+            trace.log_error(error_type=type(e).__name__, message=str(e))
             print(f"\nError: {str(e)}\n")
             print("Try again or type /quit to exit.\n")
 
